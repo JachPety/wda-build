@@ -1,25 +1,25 @@
 name: Build WebDriverAgent (unsigned IPA)
 
-# Buduje swieze WDA pod aktualny iOS na macOS runnerze (bez wlasnego Maca).
-# Wynik: artifact "WebDriverAgent-ipa" -> pobierz, podpisz 3uTools, zainstaluj na iPhonie.
-#
-# Uruchomienie: GitHub -> Actions -> "Build WebDriverAgent (unsigned IPA)" -> Run workflow.
-
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
+      - name: Select newest Xcode
+        run: |
+          ls /Applications | grep -i xcode || true
+          XC=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          echo "Using: $XC"
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+
       - name: Checkout Appium WebDriverAgent
         uses: actions/checkout@v4
         with:
           repository: appium/WebDriverAgent
           ref: master
-
-      - name: Show Xcode version
-        run: xcodebuild -version
 
       - name: Build WDA (no code signing)
         run: |
@@ -29,24 +29,12 @@ jobs:
             -scheme WebDriverAgentRunner \
             -destination "generic/platform=iOS" \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            | xcpretty || true
-          # jesli brak xcpretty – powtorz bez niego
-          if [ ! -d build/Build/Products/Debug-iphoneos/WebDriverAgentRunner-Runner.app ]; then
-            xcodebuild build-for-testing \
-              -project WebDriverAgent.xcodeproj \
-              -scheme WebDriverAgentRunner \
-              -destination "generic/platform=iOS" \
-              -derivedDataPath build \
-              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
-          fi
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
 
       - name: Package unsigned IPA
         run: |
           cd build/Build/Products/Debug-iphoneos
-          rm -rf Payload WDA.ipa
+          rm -rf Payload WDA-unsigned.ipa
           mkdir -p Payload
           cp -R WebDriverAgentRunner-Runner.app Payload/
           zip -qry WDA-unsigned.ipa Payload
