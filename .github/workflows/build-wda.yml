@@ -1,0 +1,60 @@
+name: Build WebDriverAgent (unsigned IPA)
+
+# Buduje swieze WDA pod aktualny iOS na macOS runnerze (bez wlasnego Maca).
+# Wynik: artifact "WebDriverAgent-ipa" -> pobierz, podpisz 3uTools, zainstaluj na iPhonie.
+#
+# Uruchomienie: GitHub -> Actions -> "Build WebDriverAgent (unsigned IPA)" -> Run workflow.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout Appium WebDriverAgent
+        uses: actions/checkout@v4
+        with:
+          repository: appium/WebDriverAgent
+          ref: master
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build WDA (no code signing)
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project WebDriverAgent.xcodeproj \
+            -scheme WebDriverAgentRunner \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | xcpretty || true
+          # jesli brak xcpretty – powtorz bez niego
+          if [ ! -d build/Build/Products/Debug-iphoneos/WebDriverAgentRunner-Runner.app ]; then
+            xcodebuild build-for-testing \
+              -project WebDriverAgent.xcodeproj \
+              -scheme WebDriverAgentRunner \
+              -destination "generic/platform=iOS" \
+              -derivedDataPath build \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          fi
+
+      - name: Package unsigned IPA
+        run: |
+          cd build/Build/Products/Debug-iphoneos
+          rm -rf Payload WDA.ipa
+          mkdir -p Payload
+          cp -R WebDriverAgentRunner-Runner.app Payload/
+          zip -qry WDA-unsigned.ipa Payload
+          ls -la WDA-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebDriverAgent-ipa
+          path: build/Build/Products/Debug-iphoneos/WDA-unsigned.ipa
+          if-no-files-found: error
